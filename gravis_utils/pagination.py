@@ -188,9 +188,12 @@ class ListPagination(Pagination):
         self.base_title = title
         self.items_per_page = items_per_page
 
-    def _create_embed(self, page_items: Sequence[str | EmbedField], current_page: int, total_pages: int) -> discord.Embed:
+    def _create_embed(self, page_items: Sequence[str | EmbedField], current_page: int, total_pages: int, is_show_page_in_title: bool = True) -> discord.Embed:
         if all(isinstance(item, EmbedField) for item in page_items):
-            embed = discord.Embed(title=f"{self.base_title} {current_page + 1}/{total_pages}ページ")
+            if is_show_page_in_title:
+                embed = discord.Embed(title=f"{self.base_title} {current_page + 1}/{total_pages}ページ")
+            else:
+                embed = discord.Embed(title=self.base_title)
             for field in page_items:
                 embed.add_field(name={field.name}, value={field.value}, inline=False)
             return embed
@@ -200,7 +203,7 @@ class ListPagination(Pagination):
             description="\n".join(f"{i + 1}. {item}" for i, item in enumerate(page_items, start=current_page * self.items_per_page))
         )
 
-    def _create_embeds(self, items: Sequence[str | EmbedField]) -> list[discord.Embed]:
+    def _create_embeds(self, items: Sequence[str | EmbedField], is_show_page_in_title: bool = True) -> list[discord.Embed]:
         total_pages = ceil(len(items) / self.items_per_page)
         embeds = []
 
@@ -208,7 +211,7 @@ class ListPagination(Pagination):
             start_idx = i * self.items_per_page
             end_idx = start_idx + self.items_per_page
             page_items = items[start_idx:end_idx]
-            embed = self._create_embed(page_items, i, total_pages)
+            embed = self._create_embed(page_items, i, total_pages, is_show_page_in_title)
             embeds.append(embed)
 
         return embeds

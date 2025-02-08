@@ -1,5 +1,6 @@
 from .cooldown import *
 from .pagination import *
+from .errors import *
 
 __title__ = 'gravis-utils'
 __author__ = 'gravis'

@@ -182,20 +182,23 @@ class ListPagination(Pagination):
         self, *,
         title: str,
         items_per_page: int = 10,
-        timeout: int = 120
+        timeout: int = 120,
+        embed_color: discord.Color = discord.Color.green()
     ) -> None:
         super().__init__(timeout=timeout)
         self.base_title = title
         self.items_per_page = items_per_page
+        self.color = embed_color
 
     def _create_embed(self, page_items: Sequence[str | EmbedField], current_page: int, total_pages: int, is_show_page_in_title: bool = True) -> discord.Embed:
         if all(isinstance(item, EmbedField) for item in page_items):
             if is_show_page_in_title:
-                embed = discord.Embed(title=f"{self.base_title} {current_page + 1}/{total_pages}ページ")
+                embed = discord.Embed(title=f"{self.base_title} {current_page + 1}/{total_pages}ページ", color=self.color)
             else:
                 embed = discord.Embed(title=self.base_title)
             for field in page_items:
                 embed.add_field(name={field.name}, value={field.value}, inline=False)
+            embed.set_footer(icon_url=self.ctx_or_interaction.client.user.avatar.url, text=self.ctx_or_interaction.client.user.display_name)
             return embed
 
         return discord.Embed(
@@ -223,12 +226,14 @@ class ListPagination(Pagination):
         items: Sequence[str | EmbedField],
         title: str,
         items_per_page: int = 10,
-        timeout: int = 120
+        timeout: int = 120,
+        embed_color: discord.Color = discord.Color.green()
     ) -> None:
         view = cls(
             title=title,
             items_per_page=items_per_page,
-            timeout=timeout
+            timeout=timeout,
+            embed_color=embed_color
         )
         embeds = view._create_embeds(items)
         if len(embeds) > 1:

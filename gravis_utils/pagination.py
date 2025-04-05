@@ -131,42 +131,38 @@ class Pagination(discord.ui.View):
         self.last_page_button.disabled = self.current_page == self.total_page_count - 1
         self.current_page_button.label = f"{self.current_page + 1}/{self.total_page_count}ページ"
 
-    async def go_to_page(self, page_number: int):
+    async def go_to_page(self, interaction: discord.Interaction, page_number: int):
         if 0 <= page_number < self.total_page_count:
             self.current_page = page_number
             self.update_button_states()
-            await self.message.edit(embed=self.pages[self.current_page], view=self)
+            await interaction.response.defer()
+            await interaction.followup.edit_message(self.message.id, embed=self.pages[self.current_page], view=self)
 
     async def first_page_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
-        await self.go_to_page(0)
+        await self.go_to_page(interaction, 0)
 
     async def previous_button_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
-        await self.go_to_page(self.current_page - 1)
+        await self.go_to_page(interaction, self.current_page - 1)
 
     async def page_select_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         modal = PageSelectModal(self)
         await interaction.response.send_modal(modal)
 
     async def next_button_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
-        await self.go_to_page(self.current_page + 1)
+        await self.go_to_page(interaction, self.current_page + 1)
 
     async def last_page_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
-        await self.go_to_page(self.total_page_count - 1)
+        await self.go_to_page(interaction, self.total_page_count - 1)
 
     def _is_valid_user(self, interaction: discord.Interaction) -> bool:
         if isinstance(self.ctx_or_interaction, commands.Context):

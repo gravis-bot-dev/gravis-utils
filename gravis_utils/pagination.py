@@ -135,8 +135,7 @@ class Pagination(discord.ui.View):
         if 0 <= page_number < self.total_page_count:
             self.current_page = page_number
             self.update_button_states()
-            await interaction.response.defer()
-            await interaction.followup.edit_message(self.message.id, embed=self.pages[self.current_page], view=self)
+            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
 
     async def first_page_callback(self, interaction: discord.Interaction):
         if not self._is_valid_user(interaction):

@@ -138,27 +138,32 @@ class Pagination(discord.ui.View):
             await self.message.edit(embed=self.pages[self.current_page], view=self)
 
     async def first_page_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         await self.go_to_page(0)
 
     async def previous_button_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         await self.go_to_page(self.current_page - 1)
 
     async def page_select_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         modal = PageSelectModal(self)
         await interaction.response.send_modal(modal)
 
     async def next_button_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         await self.go_to_page(self.current_page + 1)
 
     async def last_page_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         if not self._is_valid_user(interaction):
             return
         await self.go_to_page(self.total_page_count - 1)

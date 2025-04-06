@@ -52,7 +52,7 @@ class Pagination(discord.ui.View):
 
         self.pages: list[discord.Embed] | None = None
         self.ctx_or_interaction: commands.Context | discord.Interaction | None = None
-        self.message: discord.Message | None = None
+        self.message: discord.Message | discord.WebhookMessage | None = None
         self.current_page: int = 0
         self.total_page_count: int | None = None
 
@@ -73,12 +73,11 @@ class Pagination(discord.ui.View):
                 view=self
             )
         elif isinstance(ctx_or_interaction, discord.Interaction):
-            await ctx_or_interaction.followup.send(
+            self.message = await ctx_or_interaction.followup.send(
                 embed=self.pages[0],
                 view=self,
                 ephemeral=True
             )
-            self.message = await ctx_or_interaction.original_response()
 
         self.update_button_states()
 

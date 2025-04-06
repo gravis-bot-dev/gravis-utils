@@ -134,7 +134,10 @@ class Pagination(discord.ui.View):
         if 0 <= page_number < self.total_page_count:
             self.current_page = page_number
             self.update_button_states()
-            await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+            try:
+                await interaction.response.edit_message(embed=self.pages[self.current_page], view=self)
+            except discord.HTTPException:
+                self.stop()
 
     async def first_page_callback(self, interaction: discord.Interaction):
         if not self._is_valid_user(interaction):
@@ -172,8 +175,10 @@ class Pagination(discord.ui.View):
     async def on_timeout(self):
         for item in self.children:
             item.disabled = True
-        await self.message.edit(view=self)
-
+        try:
+            await self.message.edit(view=self)
+        except discord.HTTPException:
+            pass
 
 
 class ListPagination(Pagination):

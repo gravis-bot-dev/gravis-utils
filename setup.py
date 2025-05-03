@@ -7,4 +7,7 @@ setup(
     packages=find_packages(),
     install_requires=["discord.py"],
     include_package_data=True,
+    package_data={
+        "gravis_utils": ["py.typed"],
+    }
 )

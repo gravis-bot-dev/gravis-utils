@@ -14,12 +14,11 @@ Classes:
 
 import discord
 from discord.ext import commands
+from typing import Protocol, Union, Callable, Optional
+from dataclasses import dataclass
 from math import ceil
 
-from typing import Sequence
-from dataclasses import dataclass
-
-__all__ = ("EmbedField", "PageSelectModal", "Pagination", "ListPagination")
+__all__ = ("EmbedField", "PageSelectModal", "Pagination", "ListPagination", "ListPaginator", "ListEmbedRenderer", "FieldEmbedRenderer", "EmbedRenderer")
 
 
 @dataclass
@@ -30,10 +29,12 @@ class EmbedField:
     Attributes:
         name (str): フィールドの名前
         value (str): フィールドの値
+        inline (bool): フィールドをインライン表示するかどうか
     """
 
     name: str
     value: str
+    inline: bool = False
 
 
 class PageSelectModal(discord.ui.Modal):
@@ -114,7 +115,7 @@ class Pagination(discord.ui.View):
         """
         super().__init__(timeout=timeout)
 
-        self.pages: list[discord.Embed] | None = None  # ページのリスト
+        self.pages: list[discord.Embed] = []  # ページのリスト
         self.ctx_or_interaction: commands.Context | discord.Interaction | None = (
             None  # コンテキストまたはインタラクション
         )
@@ -122,7 +123,7 @@ class Pagination(discord.ui.View):
             None  # 送信されたメッセージ
         )
         self.current_page: int = 0  # 現在のページ番号（0から始まる）
-        self.total_page_count: int | None = None  # 総ページ数
+        self.total_page_count: int = 0  # 総ページ数
 
     async def start(
         self,
@@ -147,9 +148,10 @@ class Pagination(discord.ui.View):
         if isinstance(ctx_or_interaction, commands.Context):
             self.message = await ctx_or_interaction.send(embed=self.pages[0], view=self)
         elif isinstance(ctx_or_interaction, discord.Interaction):
-            self.message = await ctx_or_interaction.followup.send(
+            msg = await ctx_or_interaction.followup.send(
                 embed=self.pages[0], view=self, ephemeral=True
             )
+            self.message = msg
 
         self.update_button_states()
 
@@ -328,185 +330,198 @@ class Pagination(discord.ui.View):
         self.ctx_or_interaction = None
         self.message = None
 
+class EmbedRenderer(Protocol):
+    """Embed生成の責任を持つプロトコル"""
+    def create_embed(self, items: list, page_info: dict) -> discord.Embed:
+        ...
 
-class ListPagination(Pagination):
-    """
-    リスト形式のコンテンツをページング表示するための拡張クラス
 
-    テキストのリストやEmbedFieldのリストを簡単にページング表示するための
-    ユーティリティクラスです。自動的にページを生成し、適切な形式で表示します。
-    """
+class ListEmbedRenderer:
+    """リスト形式のEmbed生成器"""
 
     def __init__(
         self,
-        *,
         title: str,
-        items_per_page: int = 10,
-        timeout: int = 120,
-        embed_color: discord.Color = discord.Color.green(),
-    ) -> None:
-        """
-        ListPaginationを初期化します
+        color: discord.Color = discord.Color.green(),
+        show_page_in_title: bool = True,
+        item_formatter: Optional[Callable[[int, str], str]] = None
+    ):
+        self.title = title
+        self.color = color
+        self.show_page_in_title = show_page_in_title
+        self.item_formatter = item_formatter or self._default_formatter
 
-        Args:
-            title (str): ページのタイトル
-            items_per_page (int, optional): 1ページあたりのアイテム数。デフォルトは10
-            timeout (int, optional): Viewのタイムアウト時間（秒）。デフォルトは120秒
-            embed_color (discord.Color, optional): Embedの色。デフォルトは緑色
-        """
-        super().__init__(timeout=timeout)
-        self.base_title = title
-        self.items_per_page = items_per_page
-        self.color = embed_color
+    def _default_formatter(self, index: int, item: str) -> str:
+        return f"{index}. {item}"
 
-    def _create_embed(
-        self,
-        page_items: Sequence[str | EmbedField],
-        current_page: int,
-        total_pages: int,
-        is_show_page_in_title: bool = True,
-    ) -> discord.Embed:
-        """
-        ページアイテムからEmbedを作成します
+    def create_embed(self, items: list[str], page_info: dict) -> discord.Embed:
+        current = page_info["current"]
+        total = page_info["total"]
+        start_index = page_info["start_index"]
 
-        Args:
-            page_items (Sequence[str | EmbedField]):
-                ページに表示するアイテムのリスト。文字列またはEmbedFieldのシーケンス
-            current_page (int): 現在のページ番号（0から始まる）
-            total_pages (int): 総ページ数
-            is_show_page_in_title (bool, optional):
-                タイトルにページ番号を表示するかどうか。デフォルトはTrue
+        title = self.title
+        if self.show_page_in_title:
+            title = f"{self.title} {current + 1}/{total}ページ"
 
-        Returns:
-            discord.Embed: 作成されたEmbed
+        formatted_items = [
+            self.item_formatter(start_index + i + 1, item)
+            for i, item in enumerate(items)
+        ]
 
-        Note:
-            アイテムの種類（文字列またはEmbedField）に応じて適切な形式のEmbedを作成します
-        """
-        if all(isinstance(item, EmbedField) for item in page_items):
-            # EmbedFieldの場合はフィールド形式で表示
-            if is_show_page_in_title:
-                embed = discord.Embed(
-                    title=f"{self.base_title} {current_page + 1}/{total_pages}ページ",
-                    color=self.color,
-                )
-            else:
-                embed = discord.Embed(title=self.base_title)
-            for field in page_items:
-                embed.add_field(name={field.name}, value={field.value}, inline=False)
-            embed.set_footer(
-                icon_url=self.ctx_or_interaction.client.user.avatar.url,
-                text=self.ctx_or_interaction.client.user.display_name,
-            )
-            return embed
-
-        # 文字列の場合はリスト形式で表示
         return discord.Embed(
-            title=f"{self.base_title} {current_page + 1}/{total_pages}ページ",
-            description="\n".join(
-                f"{i + 1}. {item}"
-                for i, item in enumerate(
-                    page_items, start=current_page * self.items_per_page
-                )
-            ),
+            title=title,
+            description="\n".join(formatted_items),
+            color=self.color
         )
 
-    def _create_embeds(
-        self, items: Sequence[str | EmbedField], is_show_page_in_title: bool = True
-    ) -> list[discord.Embed]:
-        """
-        アイテムリストから複数のEmbedページを作成します
 
-        Args:
-            items (Sequence[str | EmbedField]):
-                ページング表示するアイテムのリスト。文字列またはEmbedFieldのシーケンス
-            is_show_page_in_title (bool, optional):
-                タイトルにページ番号を表示するかどうか。デフォルトはTrue
+class FieldEmbedRenderer:
+    """フィールド形式のEmbed生成器"""
 
-        Returns:
-            list[discord.Embed]: 作成されたEmbedのリスト
+    def __init__(
+        self,
+        title: str,
+        color: discord.Color = discord.Color.green(),
+        show_page_in_title: bool = True,
+        footer_text: Optional[str] = None,
+        footer_icon: Optional[str] = None
+    ):
+        self.title = title
+        self.color = color
+        self.show_page_in_title = show_page_in_title
+        self.footer_text = footer_text
+        self.footer_icon = footer_icon
 
-        Note:
-            アイテムを指定した数ずつに分割し、各ページのEmbedを作成します
-        """
-        total_pages = ceil(len(items) / self.items_per_page)
-        embeds = []
+    def create_embed(self, items: list[EmbedField], page_info: dict) -> discord.Embed:
+        current = page_info["current"]
+        total = page_info["total"]
+
+        title = self.title
+        if self.show_page_in_title:
+            title = f"{self.title} {current + 1}/{total}ページ"
+
+        embed = discord.Embed(title=title, color=self.color)
+
+        for field in items:
+            embed.add_field(
+                name=field.name,
+                value=field.value,
+                inline=field.inline
+            )
+
+        if self.footer_text:
+            embed.set_footer(text=self.footer_text, icon_url=self.footer_icon)
+
+        return embed
+
+
+class ListPaginator:
+    """リスト形式のページネーション専用クラス"""
+
+    def __init__(
+        self,
+        items: list[Union[str, EmbedField]],
+        items_per_page: int = 10,
+        renderer: Optional[EmbedRenderer] = None
+    ):
+        self.items = items
+        self.items_per_page = items_per_page
+        self.renderer = renderer or self._create_default_renderer()
+        self.pages = self._create_pages()
+
+    def _create_default_renderer(self) -> EmbedRenderer:
+        """デフォルトのレンダラーを作成"""
+        if all(isinstance(item, EmbedField) for item in self.items):
+            return FieldEmbedRenderer(title="List")
+        else:
+            return ListEmbedRenderer(title="List")
+
+    def _create_pages(self) -> list[discord.Embed]:
+        """ページを作成"""
+        pages = []
+        total_pages = ceil(len(self.items) / self.items_per_page)
 
         for i in range(total_pages):
             start_idx = i * self.items_per_page
             end_idx = start_idx + self.items_per_page
-            page_items = items[start_idx:end_idx]
-            embed = self._create_embed(
-                page_items, i, total_pages, is_show_page_in_title
-            )
-            embeds.append(embed)
+            page_items = self.items[start_idx:end_idx]
 
-        return embeds
+            page_info = {
+                "current": i,
+                "total": total_pages,
+                "start_index": start_idx
+            }
 
-    @classmethod
-    async def start_pagination(
-        cls,
+            embed = self.renderer.create_embed(page_items, page_info)
+            pages.append(embed)
+
+        return pages
+
+
+class ListPagination:
+    """簡単なファクトリークラス"""
+
+    @staticmethod
+    async def start(
         ctx: commands.Context | discord.Interaction,
-        items: Sequence[str | EmbedField],
-        title: str,
+        items: list[Union[str, EmbedField]],
+        *,
+        title: str = "List",
         items_per_page: int = 10,
         timeout: int = 120,
-        embed_color: discord.Color = discord.Color.green(),
+        color: discord.Color = discord.Color.green(),
+        show_page_in_title: bool = True,
+        item_formatter: Optional[Callable[[int, str], str]] = None,
+        footer_text: Optional[str] = None,
+        footer_icon: Optional[str] = None
     ) -> None:
         """
-        リスト形式のページネーションを開始します
-
-        このクラスメソッドは、リスト形式のデータをページング表示するための
-        便利なエントリポイントです。内部でListPaginationインスタンスを作成し、
-        適切な形式でページを表示します。
+        リスト形式のページネーションを開始
 
         Args:
-            ctx (commands.Context | discord.Interaction):
-                コマンドコンテキストまたはインタラクション
-            items (Sequence[str | EmbedField]):
-                表示するアイテムのリスト。文字列またはEmbedFieldのシーケンス
-            title (str):
-                ページのタイトル
-            items_per_page (int, optional):
-                1ページあたりのアイテム数。デフォルトは10
-            timeout (int, optional):
-                Viewのタイムアウト時間（秒）。デフォルトは120秒
-            embed_color (discord.Color, optional):
-                Embedの色。デフォルトは緑色
-
-        Note:
-            - アイテム数が少なく1ページに収まる場合は、ページネーションなしで表示します
-            - 複数ページある場合は、インタラクティブなページネーションを表示します
-
-        Example:
-            ```python
-            # 文字列リストの場合
-            items = ["アイテム1", "アイテム2", "アイテム3", ...]
-            await ListPagination.start_pagination(ctx, items, "アイテム一覧")
-
-            # EmbedFieldリストの場合
-            fields = [
-                EmbedField(name="項目1", value="説明1"),
-                EmbedField(name="項目2", value="説明2"),
-                ...
-            ]
-            await ListPagination.start_pagination(ctx, fields, "詳細情報")
-            ```
+            ctx: コンテキストまたはインタラクション
+            items: 表示するアイテムのリスト
+            title: ページのタイトル
+            items_per_page: 1ページあたりのアイテム数
+            timeout: タイムアウト時間
+            color: Embedの色
+            show_page_in_title: タイトルにページ番号を表示するか
+            item_formatter: アイテムのフォーマット関数
+            footer_text: フッターテキスト
+            footer_icon: フッターアイコンURL
         """
-        view = cls(
-            title=title,
+        renderer: EmbedRenderer
+        if all(isinstance(item, EmbedField) for item in items):
+            renderer = FieldEmbedRenderer(
+                title=title,
+                color=color,
+                show_page_in_title=show_page_in_title,
+                footer_text=footer_text,
+                footer_icon=footer_icon
+            )
+        else:
+            renderer = ListEmbedRenderer(
+                title=title,
+                color=color,
+                show_page_in_title=show_page_in_title,
+                item_formatter=item_formatter
+            )
+
+        # ページネーターを作成
+        paginator = ListPaginator(
+            items=items,
             items_per_page=items_per_page,
-            timeout=timeout,
-            embed_color=embed_color,
+            renderer=renderer
         )
-        embeds = view._create_embeds(items)
-        if len(embeds) > 1:
-            # 複数ページある場合はページネーション表示
-            await view.start(ctx, embeds)
+
+        # ページが1つだけの場合は単純表示
+        if len(paginator.pages) == 1:
+            if isinstance(ctx, discord.Interaction):
+                await ctx.followup.send(embed=paginator.pages[0])
+            else:
+                await ctx.send(embed=paginator.pages[0])
             return
 
-        # 1ページだけの場合は単純に表示
-        if isinstance(ctx, discord.Interaction):
-            await ctx.followup.send(embed=embeds[0])
-        else:
-            await ctx.send(embed=embeds[0])
+        # 複数ページの場合はページネーション表示
+        view = Pagination(timeout=timeout)
+        await view.start(ctx, paginator.pages)
